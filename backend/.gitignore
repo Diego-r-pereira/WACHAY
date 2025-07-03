@@ -1,0 +1,28 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Environment variables
+.env
+
+# Virtual env
+.venv/
+env/
+venv/
+
+# Alembic
+alembic/versions/
+# (pero NO ignores alembic/env.py ni alembic.ini, esos sí suben)
+
+# Database files
+*.sqlite3
+
+# VSCode/PyCharm/etc.
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
