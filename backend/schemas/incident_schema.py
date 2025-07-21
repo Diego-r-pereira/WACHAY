@@ -1,4 +1,3 @@
-
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
@@ -8,6 +7,8 @@ class IncidentBase(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     severity: Optional[str] = Field(default="Medium")
+    description: Optional[str] = None
+    image: Optional[str] = None
 
 class IncidentCreate(IncidentBase):
     pass
@@ -23,4 +24,4 @@ class IncidentRead(IncidentBase):
     confirmed_by: Optional[int] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True

@@ -1,4 +1,5 @@
 import { useAuth } from "@/services/auth.jsx";
+import { useIncidents } from "@/services/useIncidents";
 import { Flame, Globe, Image, FilePlus, Phone } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,24 +8,14 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
-import { mockIncidents, mockImages } from "@/services/mockData";
 
-
-// Datos de ejemplo
-const mockStats = [
-    { label: "Active Fires", value: 3, icon: <Flame className="text-red-500" /> },
-    { label: "Area Monitored (ha)", value: "280,000", icon: <Globe className="text-blue-700" /> },
-    { label: "Satellite Images (24h)", value: 16, icon: <Image className="text-indigo-500" /> },
-];
-
-// const mockIncidents = [
-//     { id: "INC-1027", date: "2025-06-07 14:25", location: "Tunari - Zona Norte", status: "Active", severity: "High" },
-//     { id: "INC-1024", date: "2025-06-07 10:43", location: "Tunari - Sipe Sipe", status: "Extinguished", severity: "Medium" },
-//     { id: "INC-1021", date: "2025-06-06 22:15", location: "Tunari - Melga", status: "Active", severity: "Low" },
-// ];
+// Si tienes hook de imágenes satelitales, descomenta esto:
+// import { useSatelliteImages } from "@/services/useSatelliteImages";
 
 export default function Ranger() {
     const { user } = useAuth();
+    const { incidents, isLoading, isError, mutate } = useIncidents();
+    // const { images: satelliteImages, isLoading: loadingImages } = useSatelliteImages();
 
     // Modal state
     const [open, setOpen] = useState(false);
@@ -39,22 +30,76 @@ export default function Ranger() {
         setForm({ ...form, [e.target.name]: e.target.value });
     };
 
-    const handleReport = (e) => {
+    const handleReport = async (e) => {
         e.preventDefault();
-        // Validación simple
         if (!form.location || !form.description) return;
+
         setSubmitted(true);
-        setTimeout(() => {
-            setSubmitted(false);
-            setOpen(false);
-            setForm({
-                location: "",
-                severity: "Medium",
-                description: "",
+
+        try {
+            const res = await fetch("http://localhost:8000/incidents", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    location: form.location,
+                    severity: form.severity,
+                    // latitude, longitude, description si tu backend lo soporta
+                }),
             });
-            // Aquí puedes disparar una notificación real
-        }, 1200);
+
+            if (res.ok) {
+                mutate();
+                setTimeout(() => {
+                    setSubmitted(false);
+                    setOpen(false);
+                    setForm({
+                        location: "",
+                        severity: "Medium",
+                        description: "",
+                    });
+                }, 1200);
+            } else {
+                setSubmitted(false);
+                alert("Error al reportar el incidente");
+            }
+        } catch (err) {
+            setSubmitted(false);
+            alert("Error al reportar el incidente");
+        }
     };
+
+    // Stats calculados
+    const activeFires = incidents.filter((inc) => inc.status === "Active").length;
+
+    const stats = [
+        { label: "Active Fires", value: activeFires, icon: <Flame className="text-red-500" /> },
+        { label: "Area Monitored (ha)", value: "280,000", icon: <Globe className="text-blue-700" /> },
+        { label: "Satellite Images (24h)", value: 16, icon: <Image className="text-indigo-500" /> },
+    ];
+
+    // Placeholder para imágenes satelitales hasta tener backend
+    const satelliteImages = [
+        {
+            id: 1,
+            url: "https://images.unsplash.com/photo-1465101046530-73398c7f28ca?auto=format&fit=crop&w=400&q=80",
+            date: "2025-06-01"
+        },
+        {
+            id: 2,
+            url: "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=400&q=80",
+            date: "2025-06-02"
+        },
+        {
+            id: 3,
+            url: "https://images.unsplash.com/photo-1465101178521-c1a9136a03c4?auto=format&fit=crop&w=400&q=80",
+            date: "2025-06-03"
+        },
+        {
+            id: 4,
+            url: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=400&q=80",
+            date: "2025-06-04"
+        }
+    ];
 
     return (
         <div className="flex flex-col min-h-screen">
@@ -64,7 +109,7 @@ export default function Ranger() {
                     <div>
                         <h1 className="text-3xl font-extrabold text-green-700 mb-1">Ranger Dashboard</h1>
                         <span className="text-slate-600">
-              Welcome, <b>{user.email}</b> <Badge variant="outline">guard</Badge>
+              Welcome, <b>{user?.email}</b> <Badge variant="outline">guard</Badge>
             </span>
                     </div>
                     {/* Modal Trigger */}
@@ -136,7 +181,7 @@ export default function Ranger() {
 
                 {/* Stats cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                    {mockStats.map((stat) => (
+                    {stats.map((stat) => (
                         <Card key={stat.label}>
                             <CardContent className="flex items-center gap-4 p-5">
                                 <div className="p-2 bg-slate-100 rounded-full">{stat.icon}</div>
@@ -172,19 +217,29 @@ export default function Ranger() {
                             </tr>
                             </thead>
                             <tbody>
-                            {mockIncidents.map((inc) => (
-                                <tr key={inc.id} className="border-t">
-                                    <td className="px-3 py-2">{inc.id}</td>
-                                    <td className="px-3 py-2">{inc.date}</td>
-                                    <td className="px-3 py-2">{inc.location}</td>
-                                    <td className="px-3 py-2">
-                                        <Badge color={inc.status === "Active" ? "destructive" : "default"}>
-                                            {inc.status}
-                                        </Badge>
-                                    </td>
-                                    <td className="px-3 py-2">{inc.severity}</td>
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan={5}>Loading...</td>
                                 </tr>
-                            ))}
+                            ) : isError ? (
+                                <tr>
+                                    <td colSpan={5} className="text-red-500">Error loading incidents</td>
+                                </tr>
+                            ) : (
+                                incidents.map((inc) => (
+                                    <tr key={inc.id} className="border-t">
+                                        <td className="px-3 py-2">{inc.code}</td>
+                                        <td className="px-3 py-2">{new Date(inc.date).toLocaleString()}</td>
+                                        <td className="px-3 py-2">{inc.location}</td>
+                                        <td className="px-3 py-2">
+                                            <Badge color={inc.status === "Active" ? "destructive" : "default"}>
+                                                {inc.status}
+                                            </Badge>
+                                        </td>
+                                        <td className="px-3 py-2">{inc.severity}</td>
+                                    </tr>
+                                ))
+                            )}
                             </tbody>
                         </table>
                     </div>
@@ -192,14 +247,14 @@ export default function Ranger() {
 
                 {/* Quick Access: Satellite Images */}
                 <div className="flex flex-wrap gap-6 justify-center mb-8">
-                    {mockImages.map((img) => (
+                    {satelliteImages.map((img) => (
                         <div
                             key={img.id}
                             className="w-44 h-32 rounded-lg shadow relative overflow-hidden group bg-slate-200"
                         >
                             <img
                                 src={img.url}
-                                alt={img.description}
+                                alt="satellite"
                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                             />
                             <div className="absolute left-0 bottom-0 w-full bg-black/50 text-white text-xs px-2 py-1">
@@ -209,17 +264,22 @@ export default function Ranger() {
                     ))}
                 </div>
 
+                {/* Latest Incident Reports */}
                 <section className="my-8 w-full max-w-2xl mx-auto">
                     <h2 className="text-xl font-bold mb-4">Latest Incident Reports</h2>
                     <ul className="space-y-4">
-                        {mockIncidents.map((inc) => (
+                        {(isLoading ? [] : incidents.slice(0, 3)).map((inc) => (
                             <li key={inc.id} className="bg-white rounded shadow px-4 py-2 flex gap-4 items-center">
-                                <img src={inc.image} className="w-12 h-12 rounded object-cover border" />
+                                <img
+                                    src="https://placehold.co/80x80?text=Fire"
+                                    className="w-12 h-12 rounded object-cover border"
+                                    alt="incident"
+                                />
                                 <div>
-                                    <div className="font-semibold">{inc.type}</div>
-                                    <div className="text-slate-500 text-xs">{inc.date}</div>
-                                    <div className="text-slate-700 text-sm">{inc.description}</div>
-                                    <div className="text-xs text-slate-400">Reported by: {inc.reportedBy}</div>
+                                    <div className="font-semibold">{inc.status === "Active" ? "Fire alert" : "Incident"}</div>
+                                    <div className="text-slate-500 text-xs">{new Date(inc.date).toLocaleString()}</div>
+                                    <div className="text-slate-700 text-sm">{inc.location} - Severity: {inc.severity}</div>
+                                    <div className="text-xs text-slate-400">Incident ID: {inc.code}</div>
                                 </div>
                             </li>
                         ))}
@@ -230,7 +290,7 @@ export default function Ranger() {
             {/* Footer personalizado */}
             <footer className="bg-slate-50 border-t border-slate-200 py-4 text-center text-slate-500 text-xs mt-6">
                 <div className="flex flex-col items-center gap-1">
-                    <span>For urgent fire reports contact: <b className="text-green-700">800-123-456</b> <Phone className="inline-block ml-1" size={13}/></span>
+                    <span>For urgent fire reports contact: <b className="text-green-700">800-123-456</b> <Phone className="inline-block ml-1" size={13} /></span>
                     <span>Shift Supervisor: <b>Lic. Ana Paredes</b></span>
                 </div>
             </footer>

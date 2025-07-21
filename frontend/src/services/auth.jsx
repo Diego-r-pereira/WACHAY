@@ -10,11 +10,29 @@ export function AuthProvider({ children }) {
     );
 
     // Simula login con un rol elegido
-    function login(email, role) {
-        const userData = { email, role };
-        setUser(userData);
-        localStorage.setItem("user", JSON.stringify(userData));
+    async function login(email, password) {
+        const params = new URLSearchParams();
+        params.append("username", email);
+        params.append("password", password);
+
+        const res = await fetch("http://localhost:8000/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: params,
+            credentials: "include",
+        });
+
+        if (!res.ok) {
+            alert("Login failed!");
+            return null;
+        }
+
+        const data = await res.json();
+        localStorage.setItem("user", JSON.stringify(data));
+        setUser(data);  // 👈
+        return data;
     }
+
 
     function logout() {
         setUser(null);

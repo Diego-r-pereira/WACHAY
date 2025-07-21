@@ -1,17 +1,33 @@
-from fastapi import FastAPI, Depends, HTTPException
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import FastAPI, Depends, HTTPException, Path
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import async_session
+from typing import List
+from models.user import User
+
+from schemas.incident_schema import IncidentCreate, IncidentRead, IncidentConfirm
+from crud.incident_crud import create_incident, get_all_incidents, get_active_incidents, confirm_incident
+
+from schemas.satellite_image_schema import SatelliteImageCreate, SatelliteImageRead
+from crud.satellite_image_crud import get_all_satellite_images, create_satellite_image
+
+from fastapi.security import OAuth2PasswordRequestForm
 from crud.user_crud import (
     get_all_users, create_user, get_user_by_id, update_user, delete_user
 )
-from auth import authenticate_user, create_access_token, get_current_user, require_role
 from schemas.user_schema import UserCreate, UserRead
-from typing import List
+from auth import authenticate_user, create_access_token, get_current_user, require_role
 
 app = FastAPI()
 
-# Dependency para sesión de base de datos
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
+
 async def get_db():
     async with async_session() as session:
         yield session
@@ -19,6 +35,8 @@ async def get_db():
 @app.get("/", tags=["Root"])
 def read_root():
     return {"message": "WACHAY backend funcionando 🚀"}
+
+# USER ENDPOINTS
 
 @app.get("/users", response_model=List[UserRead], tags=["Usuarios"])
 async def list_users(db: AsyncSession = Depends(get_db)):
@@ -53,13 +71,14 @@ async def delete_user_endpoint(user_id: int, db: AsyncSession = Depends(get_db))
         raise HTTPException(status_code=404, detail="User not found")
     return deleted
 
+# AUTH ENDPOINTS
+
 @app.post("/login", tags=["Auth"])
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
     user = await authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(status_code=400, detail="Incorrect username or password")
     access_token = create_access_token(data={"sub": user.username, "role": user.role})
-    # Devuelve información útil para el frontend
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -71,18 +90,11 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
 async def read_users_me(current_user: UserRead = Depends(get_current_user)):
     return current_user
 
-# Ejemplo de endpoint protegido SOLO para admin:
 @app.get("/admin-only", tags=["Auth"])
 async def admin_only(current_user: UserRead = Depends(require_role("admin"))):
     return {"message": f"Hello {current_user.username}, eres admin"}
 
-# Incident endpoints
-from schemas.incident_schema import IncidentCreate, IncidentRead, IncidentConfirm
-from crud.incident_crud import create_incident, get_all_incidents, get_active_incidents, confirm_incident
-from fastapi import Path, Depends, HTTPException
-from typing import List
-from sqlalchemy.ext.asyncio import AsyncSession
-
+# Incidents
 @app.get("/incidents", response_model=List[IncidentRead])
 async def list_all_incidents(db: AsyncSession = Depends(get_db)):
     return await get_all_incidents(db)
@@ -106,3 +118,12 @@ async def confirm_incident_status(
     if not updated:
         raise HTTPException(status_code=404, detail="Incident not found")
     return updated
+
+# Satellite Images
+@app.get("/satellite-images", response_model=List[SatelliteImageRead])
+async def list_satellite_images(db: AsyncSession = Depends(get_db)):
+    return await get_all_satellite_images(db)
+
+@app.post("/satellite-images", response_model=SatelliteImageRead)
+async def add_satellite_image(image: SatelliteImageCreate, db: AsyncSession = Depends(get_db)):
+    return await create_satellite_image(db, image)

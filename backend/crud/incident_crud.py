@@ -1,4 +1,3 @@
-
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from models.incident import Incident
@@ -11,7 +10,9 @@ async def create_incident(db: AsyncSession, incident: IncidentCreate) -> Inciden
         location=incident.location,
         latitude=incident.latitude,
         longitude=incident.longitude,
-        severity=incident.severity
+        severity=incident.severity,
+        description=incident.description,
+        image=incident.image
     )
     db.add(new_incident)
     await db.commit()
