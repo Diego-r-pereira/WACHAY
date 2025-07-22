@@ -6,12 +6,11 @@ const fetcher = (url) =>
         return res.json();
     });
 
-// Cambia la URL por la que corresponda a tu backend
-export function useIncidents() {
+export function useIncidents(endpoint = "http://localhost:8000/incidents/active") {
     const { data, error, isLoading, mutate } = useSWR(
-        "http://localhost:8000/incidents",
+        endpoint,
         fetcher,
-        { refreshInterval: 20000 } // refresca cada 20 segundos (opcional)
+        { refreshInterval: 20000 }
     );
     return {
         incidents: data || [],

@@ -1,5 +1,6 @@
 import { useAuth } from "@/services/auth.jsx";
 import { useIncidents } from "@/services/useIncidents";
+import { useSatelliteImages } from "@/services/useSatelliteImages";
 import { Flame, Globe, Image, FilePlus, Phone } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,15 +10,21 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
 
-// Si tienes hook de imágenes satelitales, descomenta esto:
-// import { useSatelliteImages } from "@/services/useSatelliteImages";
+import Map, { Marker } from "react-map-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { MapPin } from "lucide-react";
+
+import maplibregl from "maplibre-gl";
 
 export default function Ranger() {
     const { user } = useAuth();
-    const { incidents, isLoading, isError, mutate } = useIncidents();
-    // const { images: satelliteImages, isLoading: loadingImages } = useSatelliteImages();
+    // const { incidents, isLoading, isError, mutate } = useIncidents();
+    const [showAll, setShowAll] = useState(false);
+    const { incidents, isLoading, isError, mutate } = useIncidents(
+        showAll ? "http://localhost:8000/incidents" : "http://localhost:8000/incidents/active"
+    );
 
-    // Modal state
+    const { images: satelliteImages, isLoading: loadingImages } = useSatelliteImages();
     const [open, setOpen] = useState(false);
     const [form, setForm] = useState({
         location: "",
@@ -43,12 +50,12 @@ export default function Ranger() {
                 body: JSON.stringify({
                     location: form.location,
                     severity: form.severity,
-                    // latitude, longitude, description si tu backend lo soporta
+                    description: form.description,
                 }),
             });
 
             if (res.ok) {
-                mutate();
+                await mutate();
                 setTimeout(() => {
                     setSubmitted(false);
                     setOpen(false);
@@ -63,43 +70,45 @@ export default function Ranger() {
                 alert("Error al reportar el incidente");
             }
         } catch (err) {
+            console.error("Error en reporte de incidente:", err);
             setSubmitted(false);
             alert("Error al reportar el incidente");
         }
     };
 
-    // Stats calculados
+    const handleConfirm = async (incidentId) => {
+        const token = localStorage.getItem("token");  // 🔐 Obtener token guardado en login
+        try {
+            const res = await fetch(`http://localhost:8000/incidents/${incidentId}/confirm`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({ status: "Confirmed" }),
+            });
+
+            if (res.ok) {
+                await mutate();
+                alert("Incidente confirmado correctamente");
+            } else {
+                alert("Error al confirmar incidente");
+            }
+        } catch (err) {
+            console.error("Error confirmando incidente:", err);
+            alert("Error al confirmar incidente");
+        }
+    };
+
     const activeFires = incidents.filter((inc) => inc.status === "Active").length;
 
     const stats = [
         { label: "Active Fires", value: activeFires, icon: <Flame className="text-red-500" /> },
         { label: "Area Monitored (ha)", value: "280,000", icon: <Globe className="text-blue-700" /> },
-        { label: "Satellite Images (24h)", value: 16, icon: <Image className="text-indigo-500" /> },
+        { label: "Satellite Images (24h)", value: satelliteImages.length, icon: <Image className="text-indigo-500" /> },
     ];
 
-    // Placeholder para imágenes satelitales hasta tener backend
-    const satelliteImages = [
-        {
-            id: 1,
-            url: "https://images.unsplash.com/photo-1465101046530-73398c7f28ca?auto=format&fit=crop&w=400&q=80",
-            date: "2025-06-01"
-        },
-        {
-            id: 2,
-            url: "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=400&q=80",
-            date: "2025-06-02"
-        },
-        {
-            id: 3,
-            url: "https://images.unsplash.com/photo-1465101178521-c1a9136a03c4?auto=format&fit=crop&w=400&q=80",
-            date: "2025-06-03"
-        },
-        {
-            id: 4,
-            url: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=400&q=80",
-            date: "2025-06-04"
-        }
-    ];
+    const MAPBOX_TOKEN = "pk.eyJ1IjoiZGllZ29ycCIsImEiOiJjbWRlMTgwaW0wYmJ0MmxxNXNwZXR5amtoIn0.x9mAQEktqK2EtnH379_rJQ";  // 👈 token
 
     return (
         <div className="flex flex-col min-h-screen">
@@ -109,10 +118,9 @@ export default function Ranger() {
                     <div>
                         <h1 className="text-3xl font-extrabold text-green-700 mb-1">Ranger Dashboard</h1>
                         <span className="text-slate-600">
-              Welcome, <b>{user?.email}</b> <Badge variant="outline">guard</Badge>
-            </span>
+                            Welcome, <b>{user?.full_name || user?.username}</b> {user?.role}
+                        </span>
                     </div>
-                    {/* Modal Trigger */}
                     <Dialog open={open} onOpenChange={setOpen}>
                         <DialogTrigger asChild>
                             <Button variant="outline" size="sm" className="flex items-center gap-1">
@@ -122,9 +130,7 @@ export default function Ranger() {
                         <DialogContent className="sm:max-w-md">
                             <DialogHeader>
                                 <DialogTitle>Report New Incident</DialogTitle>
-                                <DialogDescription>
-                                    Please provide details about the new fire or incident detected.
-                                </DialogDescription>
+                                <DialogDescription>Please provide details about the new fire or incident detected.</DialogDescription>
                             </DialogHeader>
                             {submitted ? (
                                 <div className="p-6 flex flex-col items-center">
@@ -194,17 +200,41 @@ export default function Ranger() {
                     ))}
                 </div>
 
-                {/* Map section (placeholder) */}
-                <div className="w-full h-72 bg-slate-200 rounded-xl flex flex-col items-center justify-center shadow-inner mb-6">
-                    <Globe size={40} className="text-green-400 mb-2" />
-                    <span className="text-slate-600">[Map placeholder] Satellite View Coming Soon</span>
+                {/* Map placeholder */}
+                <div className="w-full h-72 rounded-xl overflow-hidden shadow mb-6">
+                    <Map
+                        mapLib={maplibregl}  // ✅ Especifica que use maplibre-gl en lugar de mapbox-gl
+                        initialViewState={{
+                            longitude: -66.15,
+                            latitude: -17.4,
+                            zoom: 9
+                        }}
+                        mapStyle="https://api.maptiler.com/maps/streets/style.json?key=YOUR_MAPTILER_KEY"  // Mapbox style compatible con MapTiler o cambia a tu Mapbox style
+                        mapboxAccessToken={MAPBOX_TOKEN}  // Puedes dejarlo vacío si usas MapTiler o propio
+                    >
+                        {incidents.map((inc) => (
+                            inc.longitude && inc.latitude && (
+                                <Marker key={inc.id} longitude={inc.longitude} latitude={inc.latitude}>
+                                    <MapPin className="text-red-500" />
+                                </Marker>
+                            )
+                        ))}
+                    </Map>
                 </div>
 
-                {/* Recent Incidents */}
+                {/* Recent Incidents with Confirm button */}
                 <div>
-                    <h2 className="text-xl font-bold mb-3 flex items-center gap-2">
-                        <Flame className="text-red-500" /> Recent Fires & Incidents
-                    </h2>
+                    <div className="flex justify-between items-center mb-3">
+                        <h2 className="text-xl font-bold flex items-center gap-2">
+                            <Flame className="text-red-500" /> Recent Fires & Incidents
+                        </h2>
+                        <button
+                            onClick={() => setShowAll(!showAll)}
+                            className="text-sm text-blue-600 underline"
+                        >
+                            {showAll ? "Show Active Only" : "Show All Incidents"}
+                        </button>
+                    </div>
                     <div className="overflow-x-auto">
                         <table className="min-w-full text-sm text-slate-700 border">
                             <thead className="bg-slate-100">
@@ -214,16 +244,17 @@ export default function Ranger() {
                                 <th className="px-3 py-2">Location</th>
                                 <th className="px-3 py-2">Status</th>
                                 <th className="px-3 py-2">Severity</th>
+                                <th className="px-3 py-2">Actions</th>
                             </tr>
                             </thead>
                             <tbody>
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={5}>Loading...</td>
+                                    <td colSpan={6}>Loading...</td>
                                 </tr>
                             ) : isError ? (
                                 <tr>
-                                    <td colSpan={5} className="text-red-500">Error loading incidents</td>
+                                    <td colSpan={6} className="text-red-500">Error loading incidents</td>
                                 </tr>
                             ) : (
                                 incidents.map((inc) => (
@@ -237,6 +268,16 @@ export default function Ranger() {
                                             </Badge>
                                         </td>
                                         <td className="px-3 py-2">{inc.severity}</td>
+                                        <td className="px-3 py-2">
+                                            {inc.status !== "Confirmed" && (
+                                                <button
+                                                    onClick={() => handleConfirm(inc.id)}
+                                                    className="text-blue-600 underline text-sm"
+                                                >
+                                                    Confirmar
+                                                </button>
+                                            )}
+                                        </td>
                                     </tr>
                                 ))
                             )}
@@ -245,53 +286,39 @@ export default function Ranger() {
                     </div>
                 </div>
 
-                {/* Quick Access: Satellite Images */}
+                {/* Satellite Images */}
                 <div className="flex flex-wrap gap-6 justify-center mb-8">
-                    {satelliteImages.map((img) => (
-                        <div
-                            key={img.id}
-                            className="w-44 h-32 rounded-lg shadow relative overflow-hidden group bg-slate-200"
-                        >
-                            <img
-                                src={img.url}
-                                alt="satellite"
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            />
-                            <div className="absolute left-0 bottom-0 w-full bg-black/50 text-white text-xs px-2 py-1">
-                                {img.date}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Latest Incident Reports */}
-                <section className="my-8 w-full max-w-2xl mx-auto">
-                    <h2 className="text-xl font-bold mb-4">Latest Incident Reports</h2>
-                    <ul className="space-y-4">
-                        {(isLoading ? [] : incidents.slice(0, 3)).map((inc) => (
-                            <li key={inc.id} className="bg-white rounded shadow px-4 py-2 flex gap-4 items-center">
+                    {loadingImages ? (
+                        <span>Loading satellite images...</span>
+                    ) : satelliteImages.length === 0 ? (
+                        <span>No satellite images available</span>
+                    ) : (
+                        satelliteImages.map((img) => (
+                            <div
+                                key={img.id}
+                                className="w-44 h-32 rounded-lg shadow relative overflow-hidden group bg-slate-200"
+                            >
                                 <img
-                                    src="https://placehold.co/80x80?text=Fire"
-                                    className="w-12 h-12 rounded object-cover border"
-                                    alt="incident"
+                                    src={img.url}
+                                    alt={img.description || "Satellite image"}
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                 />
-                                <div>
-                                    <div className="font-semibold">{inc.status === "Active" ? "Fire alert" : "Incident"}</div>
-                                    <div className="text-slate-500 text-xs">{new Date(inc.date).toLocaleString()}</div>
-                                    <div className="text-slate-700 text-sm">{inc.location} - Severity: {inc.severity}</div>
-                                    <div className="text-xs text-slate-400">Incident ID: {inc.code}</div>
+                                <div className="absolute left-0 bottom-0 w-full bg-black/50 text-white text-xs px-2 py-1">
+                                    {img.date}
                                 </div>
-                            </li>
-                        ))}
-                    </ul>
-                </section>
+                            </div>
+                        ))
+                    )}
+                </div>
             </main>
 
-            {/* Footer personalizado */}
             <footer className="bg-slate-50 border-t border-slate-200 py-4 text-center text-slate-500 text-xs mt-6">
                 <div className="flex flex-col items-center gap-1">
-                    <span>For urgent fire reports contact: <b className="text-green-700">800-123-456</b> <Phone className="inline-block ml-1" size={13} /></span>
-                    <span>Shift Supervisor: <b>Lic. Ana Paredes</b></span>
+          <span>
+            For urgent fire reports contact: <b className="text-green-700">800-10-4466</b>{" "}
+              <Phone className="inline-block ml-1" size={13} />
+          </span>
+                    <span>Chief Supervisor: <b>Lic. Fabiola Rojas</b></span>
                 </div>
             </footer>
         </div>

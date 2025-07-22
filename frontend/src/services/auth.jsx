@@ -1,43 +1,71 @@
-// Simulación básica de autenticación y roles (esto luego irá a backend)
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
-// Crea el contexto de autenticación
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-    const [user, setUser] = useState(
-        JSON.parse(localStorage.getItem("user")) || null
-    );
+    const [user, setUser] = useState(null);
 
-    // Simula login con un rol elegido
-    async function login(email, password) {
-        const params = new URLSearchParams();
-        params.append("username", email);
-        params.append("password", password);
+    useEffect(() => {
+        const token = localStorage.getItem("token");
+        if (token) {
+            fetch("http://localhost:8000/me", {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            })
+                .then((res) => res.json())
+                .then((data) => {
+                    setUser({
+                        id: data.id,
+                        username: data.username,
+                        email: data.email,
+                        full_name: data.full_name,
+                        role: data.role,
+                        token,
+                    });
+                })
+                .catch(() => {
+                    logout();  // token inválido → limpiar sesión
+                });
+        }
+    }, []);
 
+    const login = async (username, password) => {
         const res = await fetch("http://localhost:8000/login", {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: params,
-            credentials: "include",
+            body: new URLSearchParams({
+                username,
+                password,
+            }),
         });
 
-        if (!res.ok) {
-            alert("Login failed!");
-            return null;
+        if (res.ok) {
+            const data = await res.json();
+            localStorage.setItem("token", data.access_token);
+
+            // obtener perfil real desde /me
+            const profile = await fetch("http://localhost:8000/me", {
+                headers: { Authorization: `Bearer ${data.access_token}` },
+            }).then((r) => r.json());
+
+            setUser({
+                id: profile.id,
+                username: profile.username,
+                email: profile.email,
+                full_name: profile.full_name,
+                role: profile.role,
+                token: data.access_token,
+            });
+        } else {
+            throw new Error("Invalid credentials");
         }
+    };
 
-        const data = await res.json();
-        localStorage.setItem("user", JSON.stringify(data));
-        setUser(data);  // 👈
-        return data;
-    }
-
-
-    function logout() {
+    const logout = () => {
+        localStorage.removeItem("token");
         setUser(null);
-        localStorage.removeItem("user");
-    }
+    };
 
     return (
         <AuthContext.Provider value={{ user, login, logout }}>
@@ -46,7 +74,6 @@ export function AuthProvider({ children }) {
     );
 }
 
-// Custom hook para usar el contexto
 export function useAuth() {
     return useContext(AuthContext);
 }

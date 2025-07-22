@@ -2,8 +2,8 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/services/auth.jsx";
 
 export default function MainLayout({ children }) {
-    // ...resto del código
     const { user, logout } = useAuth();
+    const location = useLocation();  // ✅ Agregado para resolver error
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -18,7 +18,7 @@ export default function MainLayout({ children }) {
                     )}
                     {user && (
                         <span className="ml-4 flex items-center gap-2">
-              <span className="text-slate-600">Hello, <b>{user.email}</b> ({user.role})</span>
+              <span className="text-slate-600">Hello, <b>{user.full_name || user.username}</b> ({user.role})</span>
               <button onClick={logout} className="text-red-500 underline ml-2">Logout</button>
             </span>
                     )}
